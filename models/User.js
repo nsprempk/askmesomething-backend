@@ -2,6 +2,10 @@ import mongoose from "mongoose";
 
 const userSchema = new mongoose.Schema(
   {
+    // ==========================================
+    // BASIC USER INFORMATION
+    // ==========================================
+
     name: {
       type: String,
       required: [true, "Name is required"],
@@ -24,22 +28,38 @@ const userSchema = new mongoose.Schema(
       minlength: 6,
     },
 
+    // ==========================================
+    // ROLE
+    // ==========================================
+
     role: {
       type: String,
       enum: ["user", "admin"],
       default: "user",
     },
 
+    // ==========================================
+    // PROFILE
+    // ==========================================
+
     avatar: {
       type: String,
       default: "",
     },
+
+    // ==========================================
+    // PLAN
+    // ==========================================
 
     plan: {
       type: String,
       enum: ["free", "basic", "pro", "premium"],
       default: "free",
     },
+
+    // ==========================================
+    // QUESTION USAGE
+    // ==========================================
 
     dailyQuestions: {
       type: Number,
@@ -61,6 +81,10 @@ const userSchema = new mongoose.Schema(
       default: Date.now,
     },
 
+    // ==========================================
+    // ACCOUNT STATUS
+    // ==========================================
+
     isActive: {
       type: Boolean,
       default: true,
@@ -73,11 +97,13 @@ const userSchema = new mongoose.Schema(
     resetPasswordToken: {
       type: String,
       default: null,
+      select: false,
     },
 
     resetPasswordExpires: {
       type: Date,
       default: null,
+      select: false,
     },
   },
   {

@@ -21,6 +21,53 @@ fs.mkdirSync(audioDirectory, {
 });
 
 // ==========================================
+// SAFE UNIQUE FILENAME
+// ==========================================
+
+const createSafeFilename = (extension) => {
+  const timestamp = Date.now();
+  const randomPart = `${Math.random().toString(36).slice(2)}${Math.random()
+    .toString(36)
+    .slice(2)}`;
+
+  return `${timestamp}-${randomPart}${extension}`;
+};
+
+// ==========================================
+// IMAGE MIME TYPES
+// ==========================================
+
+const imageExtensions = {
+  "image/jpeg": ".jpg",
+  "image/jpg": ".jpg",
+  "image/png": ".png",
+  "image/webp": ".webp",
+};
+
+const allowedImageTypes = new Set(Object.keys(imageExtensions));
+
+// ==========================================
+// AUDIO MIME TYPES
+// ==========================================
+
+const audioExtensions = {
+  "audio/webm": ".webm",
+  "audio/ogg": ".ogg",
+  "audio/mp4": ".mp4",
+  "audio/m4a": ".m4a",
+  "audio/x-m4a": ".m4a",
+  "audio/mpeg": ".mp3",
+  "audio/mp3": ".mp3",
+  "audio/wav": ".wav",
+  "audio/x-wav": ".wav",
+  "audio/aac": ".aac",
+  "audio/x-aac": ".aac",
+  "audio/flac": ".flac",
+};
+
+const allowedAudioTypes = new Set(Object.keys(audioExtensions));
+
+// ==========================================
 // IMAGE STORAGE
 // ==========================================
 
@@ -30,13 +77,15 @@ const imageStorage = multer.diskStorage({
   },
 
   filename: (req, file, cb) => {
-    const extension = path.extname(file.originalname).toLowerCase() || ".jpg";
+    const mimeType = (file.mimetype || "").split(";")[0].trim().toLowerCase();
 
-    const uniqueName = `${Date.now()}-${Math.round(
-      Math.random() * 1e9,
-    )}${extension}`;
+    const extension = imageExtensions[mimeType];
 
-    cb(null, uniqueName);
+    if (!extension) {
+      return cb(new Error("Invalid image format."));
+    }
+
+    cb(null, createSafeFilename(extension));
   },
 });
 
@@ -52,64 +101,15 @@ const audioStorage = multer.diskStorage({
   filename: (req, file, cb) => {
     const mimeType = (file.mimetype || "").split(";")[0].trim().toLowerCase();
 
-    const extensionMap = {
-      "audio/webm": ".webm",
-      "audio/ogg": ".ogg",
-      "audio/mp4": ".mp4",
-      "audio/m4a": ".m4a",
-      "audio/x-m4a": ".m4a",
-      "audio/mpeg": ".mp3",
-      "audio/mp3": ".mp3",
-      "audio/wav": ".wav",
-      "audio/x-wav": ".wav",
-      "audio/aac": ".aac",
-      "audio/x-aac": ".aac",
-      "audio/flac": ".flac",
-    };
+    const extension = audioExtensions[mimeType];
 
-    let extension = path.extname(file.originalname).toLowerCase();
-
-    if (!extension || extension === ".") {
-      extension = extensionMap[mimeType] || ".webm";
+    if (!extension) {
+      return cb(new Error("Invalid audio format."));
     }
 
-    const uniqueName = `${Date.now()}-${Math.round(
-      Math.random() * 1e9,
-    )}${extension}`;
-
-    cb(null, uniqueName);
+    cb(null, createSafeFilename(extension));
   },
 });
-
-// ==========================================
-// IMAGE MIME TYPES
-// ==========================================
-
-const allowedImageTypes = new Set([
-  "image/jpeg",
-  "image/jpg",
-  "image/png",
-  "image/webp",
-]);
-
-// ==========================================
-// AUDIO MIME TYPES
-// ==========================================
-
-const allowedAudioTypes = new Set([
-  "audio/webm",
-  "audio/ogg",
-  "audio/mp4",
-  "audio/m4a",
-  "audio/x-m4a",
-  "audio/mpeg",
-  "audio/mp3",
-  "audio/wav",
-  "audio/x-wav",
-  "audio/aac",
-  "audio/x-aac",
-  "audio/flac",
-]);
 
 // ==========================================
 // IMAGE FILTER
@@ -118,24 +118,16 @@ const allowedAudioTypes = new Set([
 const imageFileFilter = (req, file, cb) => {
   const mimeType = (file.mimetype || "").split(";")[0].trim().toLowerCase();
 
-  console.log("=================================");
-  console.log("IMAGE UPLOAD");
-  console.log("Field:", file.fieldname);
-  console.log("Name:", file.originalname);
-  console.log("MIME:", file.mimetype);
-  console.log("Normalized MIME:", mimeType);
-  console.log("=================================");
-
   if (file.fieldname !== "image") {
     return cb(
-      new Error("Invalid image field. Expected field name: image"),
+      new Error("Invalid image field. Expected field name: image."),
       false,
     );
   }
 
   if (!allowedImageTypes.has(mimeType)) {
     return cb(
-      new Error(`Unsupported image format: ${file.mimetype || "unknown"}`),
+      new Error("Unsupported image format. Allowed: JPG, PNG and WEBP."),
       false,
     );
   }
@@ -150,26 +142,15 @@ const imageFileFilter = (req, file, cb) => {
 const audioFileFilter = (req, file, cb) => {
   const mimeType = (file.mimetype || "").split(";")[0].trim().toLowerCase();
 
-  console.log("=================================");
-  console.log("AUDIO UPLOAD");
-  console.log("Field:", file.fieldname);
-  console.log("Name:", file.originalname);
-  console.log("MIME:", file.mimetype);
-  console.log("Normalized MIME:", mimeType);
-  console.log("=================================");
-
   if (file.fieldname !== "audio") {
     return cb(
-      new Error("Invalid audio field. Expected field name: audio"),
+      new Error("Invalid audio field. Expected field name: audio."),
       false,
     );
   }
 
   if (!allowedAudioTypes.has(mimeType)) {
-    return cb(
-      new Error(`Unsupported audio format: ${file.mimetype || "unknown"}`),
-      false,
-    );
+    return cb(new Error("Unsupported audio format."), false);
   }
 
   cb(null, true);
@@ -183,7 +164,20 @@ export const uploadImage = multer({
   storage: imageStorage,
 
   limits: {
+    // 5 MB maximum
     fileSize: 5 * 1024 * 1024,
+
+    // Only one file
+    files: 1,
+
+    // Prevent excessive multipart fields
+    fields: 10,
+
+    // Prevent excessively large field names
+    fieldNameSize: 100,
+
+    // Prevent excessively large field values
+    fieldSize: 100 * 1024,
   },
 
   fileFilter: imageFileFilter,
@@ -197,7 +191,18 @@ export const uploadAudio = multer({
   storage: audioStorage,
 
   limits: {
+    // 10 MB maximum
     fileSize: 10 * 1024 * 1024,
+
+    // Only one file
+    files: 1,
+
+    // Prevent excessive multipart fields
+    fields: 10,
+
+    fieldNameSize: 100,
+
+    fieldSize: 100 * 1024,
   },
 
   fileFilter: audioFileFilter,

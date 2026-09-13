@@ -7,198 +7,78 @@ import generateAnswer from "../services/aiService.js";
 import generateImageAnswer from "../services/imageService.js";
 import transcribeAudio from "../services/speechService.js";
 
+// ==========================================
+// CONSTANTS
+// ==========================================
+
+const MAX_TEXT_QUESTION_LENGTH = 5000;
+
+const ALLOWED_QUESTION_TYPES = ["text"];
+
+// ==========================================
+// HELPER: VALIDATE OBJECT ID
+// ==========================================
+
+const isValidObjectId = (id) => {
+  return /^[a-fA-F0-9]{24}$/.test(String(id));
+};
+
+// ==========================================
+// HELPER: DELETE FILE SAFELY
+// ==========================================
+
+const deleteFileSafely = (filePath) => {
+  if (!filePath) {
+    return;
+  }
+
+  try {
+    if (fs.existsSync(filePath)) {
+      fs.unlinkSync(filePath);
+    }
+  } catch (error) {
+    console.error("Unable to delete uploaded file:", error.message);
+  }
+};
+
 // =========================
 // TEXT QUESTION
 // =========================
+
 export const askQuestion = async (req, res, next) => {
   try {
     const { question, categoryId, type = "text" } = req.body;
 
-    // Validate question
-    if (!question || !question.trim()) {
+    // ==========================================
+    // VALIDATE QUESTION
+    // ==========================================
+
+    if (typeof question !== "string" || !question.trim()) {
       return res.status(400).json({
         success: false,
         message: "Question is required.",
       });
     }
 
-    // Validate category
-    if (!categoryId) {
+    const cleanQuestion = question.trim();
+
+    if (cleanQuestion.length > MAX_TEXT_QUESTION_LENGTH) {
       return res.status(400).json({
         success: false,
-        message: "Category is required.",
+        message: `Question cannot exceed ${MAX_TEXT_QUESTION_LENGTH} characters.`,
       });
     }
-
-    // Find category
-    const category = await Category.findOne({
-      _id: categoryId,
-      isActive: true,
-    });
-
-    if (!category) {
-      return res.status(404).json({
-        success: false,
-        message: "Category not found.",
-      });
-    }
-
-    // Create question
-    const questionRecord = await Question.create({
-      user: req.user._id,
-      category: category._id,
-      type,
-      question: question.trim(),
-      status: "processing",
-    });
-
-    try {
-      // Generate AI answer
-      const answer = await generateAnswer({
-        question: question.trim(),
-        category,
-      });
-
-      questionRecord.answer = answer;
-      questionRecord.status = "completed";
-
-      await questionRecord.save();
-
-      return res.status(200).json({
-        success: true,
-        message: "Answer generated successfully.",
-        question: questionRecord,
-      });
-    } catch (aiError) {
-      questionRecord.status = "failed";
-
-      questionRecord.errorMessage = aiError.message || "AI request failed.";
-
-      await questionRecord.save();
-
-      throw aiError;
-    }
-  } catch (error) {
-    next(error);
-  }
-};
-
-// =========================
-// IMAGE QUESTION
-// =========================
-export const askImageQuestion = async (req, res, next) => {
-  let questionRecord = null;
-
-  try {
-    const { categoryId } = req.body;
-
-    // Validate image
-    if (!req.file) {
-      return res.status(400).json({
-        success: false,
-        message: "Please upload an image.",
-      });
-    }
-
-    // Validate category
-    if (!categoryId) {
-      return res.status(400).json({
-        success: false,
-        message: "Category is required.",
-      });
-    }
-
-    // Find category
-    const category = await Category.findOne({
-      _id: categoryId,
-      isActive: true,
-    });
-
-    if (!category) {
-      return res.status(404).json({
-        success: false,
-        message: "Category not found.",
-      });
-    }
-
-    // Create record
-    questionRecord = await Question.create({
-      user: req.user._id,
-      category: category._id,
-      type: "image",
-      question: `Image question: ${req.file.originalname}`,
-      imagePath: `/uploads/images/${req.file.filename}`,
-      status: "processing",
-    });
-
-    try {
-      // Generate answer
-      const answer = await generateImageAnswer({
-        file: req.file,
-        category,
-      });
-
-      questionRecord.answer = answer;
-      questionRecord.status = "completed";
-
-      await questionRecord.save();
-
-      return res.status(200).json({
-        success: true,
-        message: "Image answer generated successfully.",
-        question: questionRecord,
-      });
-    } catch (aiError) {
-      questionRecord.status = "failed";
-
-      questionRecord.errorMessage =
-        aiError.message || "AI image request failed.";
-
-      await questionRecord.save();
-
-      throw aiError;
-    }
-  } catch (error) {
-    next(error);
-  }
-};
-
-// =========================
-// VOICE QUESTION
-// =========================
-export const askVoiceQuestion = async (req, res, next) => {
-  let questionRecord = null;
-
-  try {
-    console.log("=================================");
-    console.log("VOICE CONTROLLER REACHED");
-    console.log("=================================");
-    console.log("Body:", req.body);
-    console.log("File:", req.file);
-    console.log("=================================");
-
-    const { categoryId } = req.body;
 
     // ==========================================
-    // VALIDATE AUDIO
+    // VALIDATE TYPE
     // ==========================================
 
-    if (!req.file) {
-      console.error("VOICE ERROR: req.file is missing");
-
+    if (!ALLOWED_QUESTION_TYPES.includes(type)) {
       return res.status(400).json({
         success: false,
-        message:
-          "Audio file was not received by the server. Please record again.",
+        message: "Invalid question type.",
       });
     }
-
-    console.log("Audio successfully received:");
-    console.log("Field:", req.file.fieldname);
-    console.log("Original name:", req.file.originalname);
-    console.log("MIME:", req.file.mimetype);
-    console.log("Size:", req.file.size);
-    console.log("Path:", req.file.path);
 
     // ==========================================
     // VALIDATE CATEGORY
@@ -208,6 +88,13 @@ export const askVoiceQuestion = async (req, res, next) => {
       return res.status(400).json({
         success: false,
         message: "Category is required.",
+      });
+    }
+
+    if (!isValidObjectId(categoryId)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid category.",
       });
     }
 
@@ -228,6 +115,222 @@ export const askVoiceQuestion = async (req, res, next) => {
     }
 
     // ==========================================
+    // CREATE QUESTION
+    // ==========================================
+
+    const questionRecord = await Question.create({
+      user: req.user._id,
+      category: category._id,
+      type: "text",
+      question: cleanQuestion,
+      status: "processing",
+    });
+
+    try {
+      // ==========================================
+      // GENERATE AI ANSWER
+      // ==========================================
+
+      const answer = await generateAnswer({
+        question: cleanQuestion,
+        category,
+      });
+
+      questionRecord.answer = answer;
+      questionRecord.status = "completed";
+
+      await questionRecord.save();
+
+      return res.status(200).json({
+        success: true,
+        message: "Answer generated successfully.",
+        question: questionRecord,
+      });
+    } catch (aiError) {
+      questionRecord.status = "failed";
+
+      // Don't expose/store unnecessary internal details.
+      questionRecord.errorMessage = "AI request failed.";
+
+      await questionRecord.save();
+
+      throw aiError;
+    }
+  } catch (error) {
+    next(error);
+  }
+};
+
+// =========================
+// IMAGE QUESTION
+// =========================
+
+export const askImageQuestion = async (req, res, next) => {
+  let questionRecord = null;
+
+  try {
+    const { categoryId } = req.body;
+
+    // ==========================================
+    // VALIDATE IMAGE
+    // ==========================================
+
+    if (!req.file) {
+      return res.status(400).json({
+        success: false,
+        message: "Please upload an image.",
+      });
+    }
+
+    // ==========================================
+    // VALIDATE CATEGORY
+    // ==========================================
+
+    if (!categoryId) {
+      deleteFileSafely(req.file.path);
+
+      return res.status(400).json({
+        success: false,
+        message: "Category is required.",
+      });
+    }
+
+    if (!isValidObjectId(categoryId)) {
+      deleteFileSafely(req.file.path);
+
+      return res.status(400).json({
+        success: false,
+        message: "Invalid category.",
+      });
+    }
+
+    // ==========================================
+    // FIND CATEGORY
+    // ==========================================
+
+    const category = await Category.findOne({
+      _id: categoryId,
+      isActive: true,
+    });
+
+    if (!category) {
+      deleteFileSafely(req.file.path);
+
+      return res.status(404).json({
+        success: false,
+        message: "Category not found.",
+      });
+    }
+
+    // ==========================================
+    // CREATE RECORD
+    // ==========================================
+
+    questionRecord = await Question.create({
+      user: req.user._id,
+      category: category._id,
+      type: "image",
+      question: `Image question: ${req.file.originalname}`,
+      imagePath: `/uploads/images/${req.file.filename}`,
+      status: "processing",
+    });
+
+    try {
+      // ==========================================
+      // GENERATE IMAGE ANSWER
+      // ==========================================
+
+      const answer = await generateImageAnswer({
+        file: req.file,
+        category,
+      });
+
+      questionRecord.answer = answer;
+      questionRecord.status = "completed";
+
+      await questionRecord.save();
+
+      return res.status(200).json({
+        success: true,
+        message: "Image answer generated successfully.",
+        question: questionRecord,
+      });
+    } catch (aiError) {
+      questionRecord.status = "failed";
+      questionRecord.errorMessage = "AI image request failed.";
+
+      await questionRecord.save();
+
+      throw aiError;
+    }
+  } catch (error) {
+    next(error);
+  }
+};
+
+// =========================
+// VOICE QUESTION
+// =========================
+
+export const askVoiceQuestion = async (req, res, next) => {
+  let questionRecord = null;
+
+  try {
+    const { categoryId } = req.body;
+
+    // ==========================================
+    // VALIDATE AUDIO
+    // ==========================================
+
+    if (!req.file) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "Audio file was not received by the server. Please record again.",
+      });
+    }
+
+    // ==========================================
+    // VALIDATE CATEGORY
+    // ==========================================
+
+    if (!categoryId) {
+      deleteFileSafely(req.file.path);
+
+      return res.status(400).json({
+        success: false,
+        message: "Category is required.",
+      });
+    }
+
+    if (!isValidObjectId(categoryId)) {
+      deleteFileSafely(req.file.path);
+
+      return res.status(400).json({
+        success: false,
+        message: "Invalid category.",
+      });
+    }
+
+    // ==========================================
+    // FIND CATEGORY
+    // ==========================================
+
+    const category = await Category.findOne({
+      _id: categoryId,
+      isActive: true,
+    });
+
+    if (!category) {
+      deleteFileSafely(req.file.path);
+
+      return res.status(404).json({
+        success: false,
+        message: "Category not found.",
+      });
+    }
+
+    // ==========================================
     // CREATE QUESTION RECORD
     // ==========================================
 
@@ -240,25 +343,26 @@ export const askVoiceQuestion = async (req, res, next) => {
       status: "processing",
     });
 
-    console.log("Question record created:", questionRecord._id);
-
     try {
       // ==========================================
       // TRANSCRIBE AUDIO
       // ==========================================
 
-      console.log("Starting audio transcription...");
-
       const transcription = await transcribeAudio(req.file);
-
-      console.log("Transcription:", transcription);
 
       if (!transcription || !transcription.trim()) {
         throw new Error("Unable to understand the audio recording.");
       }
 
-      questionRecord.transcription = transcription.trim();
-      questionRecord.question = transcription.trim();
+      const cleanTranscription = transcription.trim();
+
+      // Prevent excessively large transcriptions.
+      if (cleanTranscription.length > MAX_TEXT_QUESTION_LENGTH) {
+        throw new Error("The transcribed question is too long.");
+      }
+
+      questionRecord.transcription = cleanTranscription;
+      questionRecord.question = cleanTranscription;
 
       await questionRecord.save();
 
@@ -266,14 +370,10 @@ export const askVoiceQuestion = async (req, res, next) => {
       // GENERATE AI ANSWER
       // ==========================================
 
-      console.log("Generating AI answer...");
-
       const answer = await generateAnswer({
-        question: transcription.trim(),
+        question: cleanTranscription,
         category,
       });
-
-      console.log("AI answer generated.");
 
       questionRecord.answer = answer;
       questionRecord.status = "completed";
@@ -290,21 +390,17 @@ export const askVoiceQuestion = async (req, res, next) => {
         question: questionRecord,
       });
     } catch (processingError) {
-      console.error("VOICE PROCESSING ERROR:");
-      console.error(processingError);
+      console.error("Voice processing error:", processingError);
 
       questionRecord.status = "failed";
-
-      questionRecord.errorMessage =
-        processingError.message || "Voice processing failed.";
+      questionRecord.errorMessage = "Voice processing failed.";
 
       await questionRecord.save();
 
       throw processingError;
     }
   } catch (error) {
-    console.error("VOICE QUESTION ERROR:");
-    console.error(error);
+    console.error("Voice question error:", error);
 
     next(error);
   }
@@ -313,10 +409,31 @@ export const askVoiceQuestion = async (req, res, next) => {
 // =========================
 // GET QUESTION
 // =========================
+
 export const getQuestionById = async (req, res, next) => {
   try {
+    const { id } = req.params;
+
+    // ==========================================
+    // VALIDATE QUESTION ID
+    // ==========================================
+
+    if (!isValidObjectId(id)) {
+      return res.status(404).json({
+        success: false,
+        message: "Question not found.",
+      });
+    }
+
+    // ==========================================
+    // IMPORTANT SECURITY CHECK
+    // ==========================================
+    // The question MUST belong to the
+    // currently authenticated user.
+    // ==========================================
+
     const question = await Question.findOne({
-      _id: req.params.id,
+      _id: id,
       user: req.user._id,
     }).populate("category", "name slug icon description");
 
@@ -327,7 +444,11 @@ export const getQuestionById = async (req, res, next) => {
       });
     }
 
-    res.status(200).json({
+    // ==========================================
+    // RESPONSE
+    // ==========================================
+
+    return res.status(200).json({
       success: true,
       question,
     });
