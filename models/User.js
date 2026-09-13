@@ -3,7 +3,7 @@ import mongoose from "mongoose";
 const userSchema = new mongoose.Schema(
   {
     // ==========================================
-    // BASIC USER INFORMATION
+    // BASIC INFORMATION
     // ==========================================
 
     name: {
@@ -58,7 +58,7 @@ const userSchema = new mongoose.Schema(
     },
 
     // ==========================================
-    // QUESTION USAGE
+    // QUESTION LIMITS
     // ==========================================
 
     dailyQuestions: {
@@ -97,13 +97,11 @@ const userSchema = new mongoose.Schema(
     resetPasswordToken: {
       type: String,
       default: null,
-      select: false,
     },
 
     resetPasswordExpires: {
       type: Date,
       default: null,
-      select: false,
     },
   },
   {
