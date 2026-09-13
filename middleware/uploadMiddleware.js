@@ -11,17 +11,14 @@ const uploadDirectory = path.join(process.cwd(), "uploads");
 const imageDirectory = path.join(uploadDirectory, "images");
 const audioDirectory = path.join(uploadDirectory, "audio");
 
-if (!fs.existsSync(imageDirectory)) {
-  fs.mkdirSync(imageDirectory, {
-    recursive: true,
-  });
-}
+// Create directories if they don't exist
+fs.mkdirSync(imageDirectory, {
+  recursive: true,
+});
 
-if (!fs.existsSync(audioDirectory)) {
-  fs.mkdirSync(audioDirectory, {
-    recursive: true,
-  });
-}
+fs.mkdirSync(audioDirectory, {
+  recursive: true,
+});
 
 // ==========================================
 // IMAGE STORAGE
@@ -33,7 +30,7 @@ const imageStorage = multer.diskStorage({
   },
 
   filename: (req, file, cb) => {
-    const extension = path.extname(file.originalname) || ".jpg";
+    const extension = path.extname(file.originalname).toLowerCase() || ".jpg";
 
     const uniqueName = `${Date.now()}-${Math.round(
       Math.random() * 1e9,
@@ -53,22 +50,26 @@ const audioStorage = multer.diskStorage({
   },
 
   filename: (req, file, cb) => {
-    const mimeType = (file.mimetype || "").split(";")[0].trim();
+    const mimeType = (file.mimetype || "").split(";")[0].trim().toLowerCase();
 
-    let extension = path.extname(file.originalname);
+    const extensionMap = {
+      "audio/webm": ".webm",
+      "audio/ogg": ".ogg",
+      "audio/mp4": ".mp4",
+      "audio/m4a": ".m4a",
+      "audio/x-m4a": ".m4a",
+      "audio/mpeg": ".mp3",
+      "audio/mp3": ".mp3",
+      "audio/wav": ".wav",
+      "audio/x-wav": ".wav",
+      "audio/aac": ".aac",
+      "audio/x-aac": ".aac",
+      "audio/flac": ".flac",
+    };
 
-    if (!extension) {
-      const extensionMap = {
-        "audio/webm": ".webm",
-        "audio/mp4": ".mp4",
-        "audio/mpeg": ".mp3",
-        "audio/wav": ".wav",
-        "audio/x-wav": ".wav",
-        "audio/ogg": ".ogg",
-        "audio/aac": ".aac",
-        "audio/x-m4a": ".m4a",
-      };
+    let extension = path.extname(file.originalname).toLowerCase();
 
+    if (!extension || extension === ".") {
       extension = extensionMap[mimeType] || ".webm";
     }
 
@@ -81,18 +82,41 @@ const audioStorage = multer.diskStorage({
 });
 
 // ==========================================
-// IMAGE FILTER
+// IMAGE MIME TYPES
 // ==========================================
 
-const allowedImageTypes = [
+const allowedImageTypes = new Set([
   "image/jpeg",
   "image/jpg",
   "image/png",
   "image/webp",
-];
+]);
+
+// ==========================================
+// AUDIO MIME TYPES
+// ==========================================
+
+const allowedAudioTypes = new Set([
+  "audio/webm",
+  "audio/ogg",
+  "audio/mp4",
+  "audio/m4a",
+  "audio/x-m4a",
+  "audio/mpeg",
+  "audio/mp3",
+  "audio/wav",
+  "audio/x-wav",
+  "audio/aac",
+  "audio/x-aac",
+  "audio/flac",
+]);
+
+// ==========================================
+// IMAGE FILTER
+// ==========================================
 
 const imageFileFilter = (req, file, cb) => {
-  const mimeType = (file.mimetype || "").split(";")[0].trim();
+  const mimeType = (file.mimetype || "").split(";")[0].trim().toLowerCase();
 
   console.log("=================================");
   console.log("IMAGE UPLOAD");
@@ -102,33 +126,29 @@ const imageFileFilter = (req, file, cb) => {
   console.log("Normalized MIME:", mimeType);
   console.log("=================================");
 
-  if (allowedImageTypes.includes(mimeType)) {
-    cb(null, true);
-  } else {
-    cb(
+  if (file.fieldname !== "image") {
+    return cb(
+      new Error("Invalid image field. Expected field name: image"),
+      false,
+    );
+  }
+
+  if (!allowedImageTypes.has(mimeType)) {
+    return cb(
       new Error(`Unsupported image format: ${file.mimetype || "unknown"}`),
       false,
     );
   }
+
+  cb(null, true);
 };
 
 // ==========================================
 // AUDIO FILTER
 // ==========================================
 
-const allowedAudioTypes = [
-  "audio/webm",
-  "audio/mp4",
-  "audio/mpeg",
-  "audio/wav",
-  "audio/x-wav",
-  "audio/ogg",
-  "audio/aac",
-  "audio/x-m4a",
-];
-
 const audioFileFilter = (req, file, cb) => {
-  const mimeType = (file.mimetype || "").split(";")[0].trim();
+  const mimeType = (file.mimetype || "").split(";")[0].trim().toLowerCase();
 
   console.log("=================================");
   console.log("AUDIO UPLOAD");
@@ -138,14 +158,21 @@ const audioFileFilter = (req, file, cb) => {
   console.log("Normalized MIME:", mimeType);
   console.log("=================================");
 
-  if (allowedAudioTypes.includes(mimeType)) {
-    cb(null, true);
-  } else {
-    cb(
+  if (file.fieldname !== "audio") {
+    return cb(
+      new Error("Invalid audio field. Expected field name: audio"),
+      false,
+    );
+  }
+
+  if (!allowedAudioTypes.has(mimeType)) {
+    return cb(
       new Error(`Unsupported audio format: ${file.mimetype || "unknown"}`),
       false,
     );
   }
+
+  cb(null, true);
 };
 
 // ==========================================
