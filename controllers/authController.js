@@ -5,6 +5,7 @@ import jwt from "jsonwebtoken";
 
 import User from "../models/User.js";
 import PendingRegistration from "../models/PendingRegistration.js";
+import Question from "../models/Question.js";
 
 // ==========================================
 // GENERATE JWT
@@ -946,6 +947,59 @@ export const resetPassword = async (req, res, next) => {
     return res.status(200).json({
       success: true,
       message: "Password reset successfully. You can now log in.",
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// ==========================================
+// DELETE ACCOUNT
+// ==========================================
+
+export const deleteAccount = async (req, res, next) => {
+  try {
+    const { password } = req.body;
+
+    // Validate password
+    if (!password) {
+      return res.status(400).json({
+        success: false,
+        message: "Current password is required.",
+      });
+    }
+
+    // Get complete user because protect middleware removes password
+    const user = await User.findById(req.user._id);
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found.",
+      });
+    }
+
+    // Verify current password
+    const passwordMatch = await bcrypt.compare(password, user.password);
+
+    if (!passwordMatch) {
+      return res.status(401).json({
+        success: false,
+        message: "Incorrect password.",
+      });
+    }
+
+    // Delete user's questions
+    await Question.deleteMany({
+      user: user._id,
+    });
+
+    // Delete user account
+    await User.findByIdAndDelete(user._id);
+
+    return res.status(200).json({
+      success: true,
+      message: "Your account has been permanently deleted.",
     });
   } catch (error) {
     next(error);
